@@ -6,9 +6,12 @@ class Bot:
     def __init__(self):
         self.slot = 0  # What slot to put this program in
         self.isLongArmOut = False
+    
+    def setup(self):
         self.brain = Brain()
         self.controller = Controller()
         self.setupPortMappings()
+        self.setupController()
         self.setupArm()
         self.setupDrive()
         self.setupRocker()
@@ -29,6 +32,19 @@ class Bot:
         self.rockerUpBumper = Bumper(Ports.PORT1)
         self.longArm = Motor(Ports.PORT9)
         self.rockerDownBumper = Bumper(Ports.PORT6)
+
+    def setupController(self):
+        self.controller.buttonLUp.pressed(self.onLUp)
+        self.controller.buttonLDown.pressed(self.onLDown)
+        self.controller.buttonRUp.pressed(self.onRUp)
+        self.controller.buttonRDown.pressed(self.onRDown)
+        self.controller.buttonEUp.pressed(self.onEUp)
+        self.controller.buttonEDown.pressed(self.onEDown)
+        self.controller.buttonFUp.pressed(self.onFUp)
+        self.controller.buttonFDown.pressed(self.onFDown)
+        # self.rockerDownBumper.pressed(onevent_RockerDownBumper_pressed_0)
+        # add 15ms delay to make sure events are registered correctly.
+        wait(15, MSEC)
 
     def setupHealthLight(self):
         self.healthLight.set_brightness(100)
@@ -186,19 +202,6 @@ class Bot:
         self.stopRockAndShoot()
         self.shooter.stop()
 
-    def setupController(self):
-        self.controller.buttonLUp.pressed(self.onLUp)
-        self.controller.buttonLDown.pressed(self.onLDown)
-        self.controller.buttonRUp.pressed(self.onRUp)
-        self.controller.buttonRDown.pressed(self.onRDown)
-        self.controller.buttonEUp.pressed(self.onEUp)
-        self.controller.buttonEDown.pressed(self.onEDown)
-        self.controller.buttonFUp.pressed(self.onFUp)
-        self.controller.buttonFDown.pressed(self.onFDown)
-        # self.rockerDownBumper.pressed(onevent_RockerDownBumper_pressed_0)
-        # add 15ms delay to make sure events are registered correctly.
-        wait(15, MSEC)
-
     def checkHealth(self):
         color = Color.RED
         capacity = self.brain.battery.capacity()
@@ -213,7 +216,7 @@ class Bot:
         self.healthLight.set_color(color)
 
     def run(self):
-        self.setupController()
+        self.setup()
         if self.slot == 2:   # Auton
             # AutoShootBlue_near(True)
             pass
@@ -228,3 +231,5 @@ class Bot:
                 self.checkHealth()
                 wait(20, MSEC)  # Yield to other things going on
 
+bot = Bot()
+bot.run()
