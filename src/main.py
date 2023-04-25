@@ -111,7 +111,7 @@ class Bot:
         self.brain.play_sound(SoundType.WRONG_WAY)
         self.brain.play_note(3, 6, 1000)
         self.shooter.spin(REVERSE)
-        self.rockDownToShoot(auto=True)
+        self.rockUpToCatch(auto=True)
 
     def startShooter(self):
         self.shooter.spin(FORWARD)
@@ -130,10 +130,20 @@ class Bot:
     def autoShoot(self):
         while self.controller.buttonRDown.pressing():
             self.startShooter()
-            self.rockDownToShoot(auto=True)
             self.rockUpToCatch(auto=True)
+            self.rockDownToShoot(auto=True)
 
-    def rockUpToCatch(self, auto: bool = False):
+    def rockDownToShoot(self, auto: bool = False):
+        print("rockDown")
+     
+        # Wait up to for shooter to spin
+        self.brain.timer.clear()
+        while (self.brain.timer.time(SECONDS) < 2
+                and self.shooter.velocity(PERCENT) > 0.0               
+                and self.shooter.velocity(PERCENT) < 50.0):
+            print("Velocity: " + str(self.shooter.velocity(PERCENT)))
+            wait(30, MSEC)
+
         self.rocker.spin(FORWARD)
         self.brain.timer.clear()
         while (self.brain.timer.time(SECONDS) < 2
@@ -144,17 +154,13 @@ class Bot:
         self.rocker.set_stopping(BRAKE)
         self.rocker.stop()
 
-    def rockDownToShoot(self, auto: bool = False):
+    def rockUpToCatch(self, auto: bool = False):
+        print("rockUp")
         # If basket is all the way down, raise it a bit
         if self.basketDownBumper.pressing():
             self.arm.set_timeout(2, SECONDS)
             self.arm.spin_for(FORWARD, 1, TURNS)
-     
-        # Wait up to 3 seconds for shooter to spin up to 70% velocity
-        self.brain.timer.clear()
-        while (self.brain.timer.time(SECONDS) < 2
-                and self.shooter.velocity(PERCENT) < 50.0):
-            wait(30, MSEC)
+
         self.rocker.spin(REVERSE)
         self.brain.timer.clear()
         while (not self.rockerUpBumper.pressing()
@@ -204,10 +210,10 @@ class Bot:
             self.startShooter()
 
     def onEUp(self):
-        self.rockUpToCatch(auto=False)
+        self.rockDownToShoot(auto=False)
 
     def onEDown(self):
-          self.rockDownToShoot(auto=False)
+          self.rockUpToCatch(auto=False)
 
     def onFUp(self):
         self.toggleLongArm()
