@@ -149,8 +149,12 @@ class Bot:
         if self.basketDownBumper.pressing():
             self.arm.set_timeout(2, SECONDS)
             self.arm.spin_for(FORWARD, 1, TURNS)
-            self.brain.play_sound(SoundType.FILLUP)
-
+     
+        # Wait up to 3 seconds for shooter to spin up to 70% velocity
+        self.brain.timer.clear()
+        while (self.brain.timer.time(SECONDS) < 2
+                and self.shooter.velocity(PERCENT) < 50.0):
+            wait(30, MSEC)
         self.rocker.spin(REVERSE)
         self.brain.timer.clear()
         while (not self.rockerUpBumper.pressing()
