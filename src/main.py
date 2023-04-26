@@ -3,8 +3,10 @@ from vex import *
 
 class Bot:
     def __init__(self):
+        self.counter = 0
         self.slot = 0  # What slot to put this program in
         self.isLongArmOut = False
+        self.isAutoShooting = False
     
     def setup(self):
         self.brain = Brain()
@@ -36,6 +38,7 @@ class Bot:
         self.controller.buttonLDown.pressed(self.onLDown)
         self.controller.buttonRUp.pressed(self.onRUp)
         self.controller.buttonRDown.pressed(self.onRDown)
+        self.controller.buttonRDown.released(self.onRDownReleased)
         self.controller.buttonEUp.pressed(self.onEUp)
         self.controller.buttonEDown.pressed(self.onEDown)
         self.controller.buttonFUp.pressed(self.onFUp)
@@ -111,7 +114,7 @@ class Bot:
         self.brain.play_sound(SoundType.WRONG_WAY)
         self.brain.play_note(3, 6, 1000)
         self.shooter.spin(REVERSE)
-        self.rockUpToCatch(auto=True)
+        self.rockUpToCatch()
 
     def startShooter(self):
         self.shooter.spin(FORWARD)
@@ -128,13 +131,13 @@ class Bot:
 
     # Experimental: Hold the R-Down bumper and we keep rocking and shooting
     def autoShoot(self):
-        while self.controller.buttonRDown.pressing():
+        while self.isAutoShooting:
             self.startShooter()
-            self.rockUpToCatch(auto=True)
-            self.rockDownToShoot(auto=True)
+            self.rockUpToCatch()
+            self.rockDownToShoot()
 
-    def rockDownToShoot(self, auto: bool = False):
-        print("rockDown")
+    def rockDownToShoot(self):
+        print("rockDownToShoot")
      
         # Wait up to for shooter to spin
         self.brain.timer.clear()
@@ -147,15 +150,15 @@ class Bot:
         self.rocker.spin(FORWARD)
         self.brain.timer.clear()
         while (self.brain.timer.time(SECONDS) < 2
-                and (auto or (
+                and (self.isAutoShooting or (
                         self.controller.buttonEUp.pressing()
                         and not self.controller.buttonEDown.pressing()))):
             wait(20, MSEC)
         self.rocker.set_stopping(BRAKE)
         self.rocker.stop()
 
-    def rockUpToCatch(self, auto: bool = False):
-        print("rockUp")
+    def rockUpToCatch(self):
+        print("rockUpToCatch")
         # If basket is all the way down, raise it a bit
         if self.basketDownBumper.pressing():
             self.arm.set_timeout(2, SECONDS)
@@ -165,7 +168,7 @@ class Bot:
         self.brain.timer.clear()
         while (not self.rockerUpBumper.pressing()
                 and self.brain.timer.time(SECONDS) < 2
-                and (auto
+                and (self.isAutoShooting
                     or (self.controller.buttonEDown.pressing()
                         and not self.controller.buttonEUp.pressing()))):
             wait(20, MSEC)
@@ -199,21 +202,28 @@ class Bot:
     def onLUp(self):
         self.raiseArmBasket(auto=False)
 
-    def onLDown(self):
-        self.lowerArmBasket(auto=False)
-
     def onRUp(self):
         self.startSpinner()
 
+    def onLDown(self):
+        self.lowerArmBasket(auto=False)
+
+    def onRDownReleased(self):
+        self.isAutoShooting = False
+        print('Stop autoshoot:' + str(self.counter))
+
     def onRDown(self):
+        self.counter += 1
+        self.isAutoShooting = True
         if not self.controller.buttonRUp.pressing():
+            print("Counter=" + str(self.counter))
             self.startShooter()
 
     def onEUp(self):
-        self.rockDownToShoot(auto=False)
+        self.rockDownToShoot()
 
     def onEDown(self):
-          self.rockUpToCatch(auto=False)
+          self.rockUpToCatch()
 
     def onFUp(self):
         self.toggleLongArm()
