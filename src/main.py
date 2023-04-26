@@ -138,18 +138,26 @@ class Bot:
 
     def rockDownToShoot(self):
         print("rockDownToShoot")
-     
+        if self.rockerDownBumper.pressing():
+            return  # The rocker is already down
+        
+        self.rocker.set_timeout(1000, MSEC)
+        self.rocker.spin_for(FORWARD, 0.5, TURNS)
+
         # Wait up to for shooter to spin
         self.brain.timer.clear()
         while (self.brain.timer.time(SECONDS) < 2
+                and not self.rockerDownBumper.pressing
                 and self.shooter.velocity(PERCENT) > 0.0               
                 and self.shooter.velocity(PERCENT) < 50.0):
+            
             print("Velocity: " + str(self.shooter.velocity(PERCENT)))
             wait(30, MSEC)
 
         self.rocker.spin(FORWARD)
         self.brain.timer.clear()
         while (self.brain.timer.time(SECONDS) < 2
+                and not self.rockerDownBumper.pressing
                 and (self.isAutoShooting or (
                         self.controller.buttonEUp.pressing()
                         and not self.controller.buttonEDown.pressing()))):
@@ -169,8 +177,7 @@ class Bot:
         while (not self.rockerUpBumper.pressing()
                 and self.brain.timer.time(SECONDS) < 2
                 and (self.isAutoShooting
-                    or (self.controller.buttonEDown.pressing()
-                        and not self.controller.buttonEUp.pressing()))):
+                    or not self.controller.buttonEUp.pressing())):
             wait(20, MSEC)
         self.rocker.set_stopping(BRAKE)
         self.rocker.stop()
@@ -210,20 +217,24 @@ class Bot:
 
     def onRDownReleased(self):
         self.isAutoShooting = False
-        print('Stop autoshoot:' + str(self.counter))
+        print('Stop autoshooting')
 
     def onRDown(self):
-        self.counter += 1
-        self.isAutoShooting = True
+        # Ignore if both R buttons are pressed at the same time
         if not self.controller.buttonRUp.pressing():
-            print("Counter=" + str(self.counter))
+            print("Start autoshooting")
+            self.isAutoShooting = True
             self.startShooter()
+            self.autoShoot()
 
     def onEUp(self):
+        self.isAutoShooting = False
         self.rockDownToShoot()
+        
 
     def onEDown(self):
-          self.rockUpToCatch()
+        self.isAutoShooting = False
+        self.rockUpToCatch()
 
     def onFUp(self):
         self.toggleLongArm()
