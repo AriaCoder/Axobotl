@@ -137,33 +137,46 @@ class Bot:
             self.rockDownToShoot()
 
     def rockDownToShoot(self):
-        print("rockDownToShoot")
+        print("rockDownToShoot!!")
         if self.rockerDownBumper.pressing():
             return  # The rocker is already down
         
-        self.rocker.set_timeout(1000, MSEC)
-        self.rocker.spin_for(FORWARD, 0.5, TURNS)
+        # Bring the rocker halfway
+        if (not self.controller.buttonEUp.pressing()
+            and not self.isAutoShooting):
+            self.rocker.set_stopping(BRAKE)
+            self.rocker.set_timeout(1000, MSEC)
+            self.rocker.spin_for(FORWARD, 0.2, TURNS, wait=True)
+            self.rocker.stop()
+            self.rocker.set_timeout(2000, MSEC)
 
-        # Wait up to for shooter to spin
+        # Wait for shooter to spin up IF autoshooting
         self.brain.timer.clear()
         while (self.brain.timer.time(SECONDS) < 2
-                and not self.rockerDownBumper.pressing
+                and self.isAutoShooting
+                and not self.rockerDownBumper.pressing()
                 and self.shooter.velocity(PERCENT) > 0.0               
                 and self.shooter.velocity(PERCENT) < 50.0):
-            
             print("Velocity: " + str(self.shooter.velocity(PERCENT)))
             wait(30, MSEC)
 
-        self.rocker.spin(FORWARD)
+        self.rocker.spin(FORWARD, 100, PERCENT)
         self.brain.timer.clear()
         while (self.brain.timer.time(SECONDS) < 2
-                and not self.rockerDownBumper.pressing
-                and (self.isAutoShooting or (
-                        self.controller.buttonEUp.pressing()
-                        and not self.controller.buttonEDown.pressing()))):
+                and not self.rockerDownBumper.pressing()
+                and (self.isAutoShooting
+                     or self.controller.buttonEUp.pressing())):
             wait(20, MSEC)
+        
         self.rocker.set_stopping(BRAKE)
         self.rocker.stop()
+
+        # Experimental: Bounce feature: if you keep holding the button,
+        # we can "bounce"
+        while (not self.isAutoShooting
+                and self.controller.buttonEUp.pressing()):
+            print("Bouncing!")
+            wait(20, MSEC)
 
     def rockUpToCatch(self):
         print("rockUpToCatch")
@@ -171,6 +184,15 @@ class Bot:
         if self.basketDownBumper.pressing():
             self.arm.set_timeout(2, SECONDS)
             self.arm.spin_for(FORWARD, 1, TURNS)
+
+        # "Pop" if the rocker is already UP to help tumble discs
+        '''
+        if self.rockerUpBumper.pressing:
+            self.rocker.set_velocity(50, PERCENT)
+            self.rocker.spin_for(FORWARD, 70, DEGREES)
+            wait(1000, MSEC)
+            self.rocker.set_velocity(100, PERCENT)
+        '''
 
         self.rocker.spin(REVERSE)
         self.brain.timer.clear()
@@ -225,14 +247,18 @@ class Bot:
             print("Start autoshooting")
             self.isAutoShooting = True
             self.startShooter()
+            self.brain.timer.clear()
+            while self.isAutoShooting and self.brain.timer.time(SECONDS) < 1:
+                wait(20, MSEC) # Wait and see if button is held down
             self.autoShoot()
 
     def onEUp(self):
+        print("onEUp")
         self.isAutoShooting = False
         self.rockDownToShoot()
-        
 
     def onEDown(self):
+        print("onEDown")
         self.isAutoShooting = False
         self.rockUpToCatch()
 
