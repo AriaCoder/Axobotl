@@ -63,7 +63,7 @@ class Bot:
         self.shooter.set_reversed(True)
         self.shooter.set_stopping(COAST)
         self.shooter.set_max_torque(100, PERCENT)
-        self.shooter.set_velocity(90, PERCENT)
+        self.shooter.set_velocity(80, PERCENT)
 
     def setupSpinner(self):
         pass
@@ -113,7 +113,7 @@ class Bot:
     def startSpinner(self):
         self.brain.play_sound(SoundType.WRONG_WAY)
         self.brain.play_note(3, 6, 1000)
-        self.shooter.spin(REVERSE)
+        self.shooter.spin(REVERSE, 100, PERCENT)
         self.rockUpToCatch()
 
     def startShooter(self):
@@ -156,7 +156,7 @@ class Bot:
                 and self.isAutoShooting
                 and not self.rockerDownBumper.pressing()
                 and self.shooter.velocity(PERCENT) > 0.0               
-                and self.shooter.velocity(PERCENT) < 50.0):
+                and self.shooter.velocity(PERCENT) < 30.0):
             print("Velocity: " + str(self.shooter.velocity(PERCENT)))
             wait(30, MSEC)
 
