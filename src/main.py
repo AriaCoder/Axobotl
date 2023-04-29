@@ -4,7 +4,7 @@ from vex import *
 class Bot:
     def __init__(self):
         self.counter = 0
-        self.slot = 0  # What slot to put this program in
+        self.slot = 1  # What slot to put this program in
         self.isLongArmOut = False
         self.isAutoShooting = False
     
@@ -63,7 +63,7 @@ class Bot:
         self.shooter.set_reversed(True)
         self.shooter.set_stopping(COAST)
         self.shooter.set_max_torque(100, PERCENT)
-        self.shooter.set_velocity(80, PERCENT)
+        self.shooter.set_velocity(67, PERCENT)
 
     def setupSpinner(self):
         pass
