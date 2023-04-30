@@ -32,6 +32,7 @@ class Bot:
         # Change the botMode to change the behavior
         self.botMode = BotMode.DRIVER
         self.isLongArmOut = False
+        self.isAutoRunning = False
         self.isAutoShooting = False
         self.isAutoReady = False
     
@@ -255,11 +256,15 @@ class Bot:
         self.longArm.set_stopping(BRAKE)
         self.longArm.stop()
 
-    def stopRockAndShoot(self):
+    def stopEverything(self):
         self.rocker.stop()
         self.shooter.set_stopping(COAST)
         self.shooter.stop()
-
+        self.arm.stop()
+        if self.driveTrain is not None:
+            self.driveTrain.stop()
+        self.longArm.stop()
+    
     def onLUp(self):
         self.raiseArmBasket(auto=False)
 
@@ -298,7 +303,7 @@ class Bot:
         self.toggleLongArm()
 
     def onFDown(self):
-        self.stopRockAndShoot()
+        self.stopEverything()
         self.shooter.stop()
     
     def autoSetup(self):
@@ -336,12 +341,23 @@ class Bot:
             self.basketUpBumper.pressed(self.onBasketUpBumper)
 
     def onHealthLightPressed(self):
-        self.brain.screen.print("Pressed LED")
-        self.brain.screen.next_row()
-        self.autoSetup()
+        if self.isAutoRunning:
+            # Tell the rest of the code to stop
+            self.isAutoRunning = False
+            self.stopEverything()
+        else:
+            self.isAutoRunning = True
+            self.brain.screen.print("Pressed LED")
+            self.brain.screen.next_row()
+            self.autoSetup()
+            self.isAutoRunning = False
 
     def onBasketUpBumper(self):
-        self.autoNear()
+        try:
+            self.isAutoRunning = True
+            self.autoNear()
+        except ValueError as ex:
+            self.brain.screen.print("EXCEPTION!")
 
     def checkHealth(self):
         color = Color.RED
@@ -356,8 +372,20 @@ class Bot:
             color = Color.RED
         self.healthLight.set_color(color)
 
+    def autoDrive(self, direction, distance, units=DistanceUnits.IN,
+                  velocity=None, units_v:VelocityPercentUnits=VelocityUnits.RPM, wait=True):
+        self.driveTrain.drive_for(direction,distance, units, velocity, units_v, wait)
+        if not self.isAutoRunning:
+            raise ValueError("Aborted autoDrive")
+
+    def autoTurn(self, angle, units=RotationUnits.DEG,
+                 velocity=None, units_v:VelocityPercentUnits=VelocityUnits.RPM, wait=True):
+        self.driveTrain.turn_for(LEFT, angle, units, velocity, units_v, wait)
+        if not self.isAutoRunning:
+            raise ValueError("Aborted autoTurn")
+
     def autoNear(self):
-        if self.driveTrain is not None:
+        if self.driveTrain is not None and self.isAutoRunning:
             if self.isAutoReady:
                 self.brain.screen.print("Starting Auto Near...")
                 self.brain.screen.next_row()
@@ -366,30 +394,30 @@ class Bot:
                 self.brain.screen.next_row()
                 return
                  
-            self.driveTrain.drive_for(REVERSE, 200, MM)
-            self.driveTrain.turn_to_rotation(-35, DEGREES)
+            self.autoDrive(REVERSE, 200, MM)
+            self.autoTurn(-35, DEGREES)
             self.driveTrain.set_timeout(3, SECONDS)
-            self.driveTrain.drive_for(REVERSE, 780, MM)
-            self.driveTrain.turn_to_rotation(-3, DEGREES)
+            self.autoDrive(REVERSE, 780, MM)
+            self.autoTurn(-3, DEGREES)
             self.driveTrain.set_timeout(3, SECONDS)
             self.arm.spin_for(FORWARD, 300, DEGREES, wait=False)
-            self.driveTrain.drive_for(FORWARD, 200, MM)
+            self.autoDrive(FORWARD, 200, MM)
             self.autoWiggleBlue()
-            self.driveTrain.drive_for(REVERSE, 220, MM)
-            self.driveTrain.turn_to_rotation(35, DEGREES)
-            self.driveTrain.drive_for(REVERSE, 240, MM)
-            self.driveTrain.turn_to_rotation(0, DEGREES)
+            self.autoDrive(REVERSE, 220, MM)
+            self.autoTurn(35, DEGREES)
+            self.autoDrive(REVERSE, 240, MM)
+            self.autoTurn(0, DEGREES)
             self.driveTrain.set_drive_velocity(100, PERCENT)
             self.shooter.spin(FORWARD)
-            self.driveTrain.drive_for(REVERSE, 130, MM)
+            self.autoDrive(REVERSE, 130, MM)
             self.autoShoot(3)
             self.driveTrain.set_timeout(2, SECONDS)
-            self.driveTrain.drive_for(FORWARD, 50, MM)
-            self.driveTrain.drive_for(REVERSE, 70, MM)
+            self.autoDrive(FORWARD, 50, MM)
+            self.autoDrive(REVERSE, 70, MM)
             self.autoShoot(7)
 
     def autoFar(self):
-        if self.driveTrain is not None:
+        if self.driveTrain is not None and self.isAutoRunning:
             if self.isAutoReady:
                 self.brain.screen.print("Starting Auto Far...")
                 self.brain.screen.next_row()
@@ -398,22 +426,22 @@ class Bot:
                 self.brain.screen.next_row()
                 return
             
-            self.driveTrain.drive_for(REVERSE, 200, MM)
-            self.driveTrain.turn_to_rotation(36, DEGREES)
+            self.autoDrive(REVERSE, 200, MM)
+            self.autoTurn(36, DEGREES)
             self.driveTrain.set_timeout(10, SECONDS)
-            self.driveTrain.drive_for(REVERSE, 820, MM)
-            self.driveTrain.turn_to_rotation(0, DEGREES)
+            self.autoDrive(REVERSE, 820, MM)
+            self.autoTurn(0, DEGREES)
             self.driveTrain.set_timeout(3, SECONDS)
             self.arm.spin_for(FORWARD, 300, DEGREES, wait=False)
-            self.driveTrain.drive_for(FORWARD, 255, MM)
+            self.autoDrive(FORWARD, 255, MM)
             self.autoWiggleBlue()
-            self.driveTrain.drive_for(REVERSE, 220, MM)
-            self.driveTrain.turn_to_rotation(-40, DEGREES)
-            self.driveTrain.drive_for(REVERSE, 200, MM)
-            self.driveTrain.turn_to_rotation(-8, DEGREES)
+            self.autoDrive(REVERSE, 220, MM)
+            self.autoTurn(-40, DEGREES)
+            self.autoDrive(REVERSE, 200, MM)
+            self.autoTurn(-8, DEGREES)
             self.driveTrain.set_drive_velocity(100, PERCENT)
             self.shooter.spin(FORWARD)
-            self.driveTrain.drive_for(REVERSE, 130, MM)
+            self.autoDrive(REVERSE, 130, MM)
             self.autoShoot(4)
             self.shooter.stop()
             self.autoPushYellowFromFar()
@@ -421,9 +449,9 @@ class Bot:
     def autoPushYellowFromFar(self):
         if self.driveTrain is not None:
             self.driveTrain.turn_for(LEFT, 95, DEGREES)
-            self.driveTrain.drive_for(FORWARD, 200, MM)
+            self.autoDrive(FORWARD, 200, MM)
             self.driveTrain.turn_for(RIGHT, 30, DEGREES)
-            self.driveTrain.drive_for(FORWARD, 200, MM)
+            self.autoDrive(FORWARD, 200, MM)
 
     def autoWiggleBlue(self):
         # Wiggle forward and back to help tilt discs in
@@ -431,9 +459,9 @@ class Bot:
             self.arm.spin_for(REVERSE, 300, DEGREES, wait=False)
             wait(1.5, SECONDS)
             self.driveTrain.set_timeout(2, SECONDS)
-            self.driveTrain.drive_for(FORWARD, 30, MM)
-            self.driveTrain.drive_for(REVERSE, 40, MM)
-            self.driveTrain.drive_for(FORWARD, 80, MM)
+            self.autoDrive(FORWARD, 30, MM)
+            self.autoDrive(REVERSE, 40, MM)
+            self.autoDrive(FORWARD, 80, MM)
 
     def run(self):
         self.setup()
