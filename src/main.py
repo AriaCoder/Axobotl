@@ -1,10 +1,24 @@
 # Library imports
 from vex import *
 
+class botEnum:
+    '''Base class for all enumerated types'''
+    value = 0
+    name = ""
+
+    def __init__(self, value, name):
+        self.value = value
+        self.name = name
+
+    def __str__(self):
+        return self.name
+
+    def __repr__(self):
+        return self.name
 
 class BotMode:
     '''The measurement units for distance values.'''
-    class BotMode(vexEnum):
+    class BotMode(botEnum):
         pass
     DRIVER = BotMode(0, "Driver")
     '''Driver control mode'''
@@ -19,6 +33,7 @@ class Bot:
         self.botMode = BotMode.DRIVER
         self.isLongArmOut = False
         self.isAutoShooting = False
+        self.isAutoReady = False
     
     def setup(self):
         self.brain = Brain()
@@ -36,18 +51,7 @@ class Bot:
         self.gyro = Gyro(Ports.PORT10)
         self.motorLeft = Motor(Ports.PORT5)
         self.motorRight = Motor(Ports.PORT7)
-        if self.botMode == BotMode.DRIVER:
-            self.driveTrain = None
-        else:
-            self.isAutoShooting = True
-            self.driveTrain = SmartDrive(self.motorLeft, 
-                                         self.motorRight,
-                                         self.gyro,
-                                         wheelTravel=7.87402,
-                                         trackWidth=9,
-                                         wheelBase=(6+(3/16)),
-                                         units=DistanceUnits.IN,
-                                         externalGearRatio=1)
+        self.driveTrain = None  # Default is DRIVER mode, no driveTrain
         self.rocker = Motor(Ports.PORT12)
         self.shooter = Motor(Ports.PORT4)
         self.arm = Motor(Ports.PORT3)
@@ -68,12 +72,14 @@ class Bot:
         self.controller.buttonEDown.pressed(self.onEDown)
         self.controller.buttonFUp.pressed(self.onFUp)
         self.controller.buttonFDown.pressed(self.onFDown)
-        # self.rockerDownBumper.pressed(onevent_RockerDownBumper_pressed_0)
-        # add 15ms delay to make sure events are registered correctly.
+        # Delay to make sure events are registered correctly.
         wait(15, MSEC)
 
     def setupHealthLight(self):
         self.healthLight.set_brightness(100)
+        # For autonomous: press the LED button to start 
+        self.healthLight.pressed(self.onHealthLightPressed)
+
 
     def setupArm(self):
         self.arm.stop()
@@ -101,19 +107,13 @@ class Bot:
         RockerDown = 0
 
     def setupDrive(self):
-        if self.driveTrain is None:
-            self.motorLeft.set_velocity(0, PERCENT)
-            self.motorLeft.set_max_torque(100, PERCENT)
-            self.motorLeft.spin(FORWARD)
-            self.motorRight.set_reversed(True)
-            self.motorRight.set_velocity(0, PERCENT)
-            self.motorRight.set_max_torque(100, PERCENT)
-            self.motorRight.spin(FORWARD)
-        else:
-            self.driveTrain.set_timeout(3, SECONDS)
-            self.driveTrain.set_turn_velocity(80, PERCENT)
-            self.driveTrain.set_drive_velocity(90, PERCENT)
-            self.driveTrain.drive_for(REVERSE, 200, MM)
+        self.motorLeft.set_velocity(0, PERCENT)
+        self.motorLeft.set_max_torque(100, PERCENT)
+        self.motorLeft.spin(FORWARD)
+        self.motorRight.set_reversed(True)
+        self.motorRight.set_velocity(0, PERCENT)
+        self.motorRight.set_max_torque(100, PERCENT)
+        self.motorRight.spin(FORWARD)
 
     def updateLeftDrive(self, joystickTolerance: int):
         velocity: float = self.controller.axisA.position()
@@ -300,6 +300,48 @@ class Bot:
     def onFDown(self):
         self.stopRockAndShoot()
         self.shooter.stop()
+    
+    def autoSetup(self):
+        if not self.isAutoReady:
+            self.botMode = BotMode.AUTONEAR
+            self.isAutoShooting = True
+
+            self.driveTrain = SmartDrive(self.motorLeft, 
+                                         self.motorRight,
+                                         self.gyro,
+                                         wheelTravel=200,
+                                         trackWidth=228.6,
+                                         wheelBase=(157.1625),
+                                         units=DistanceUnits.MM,
+                                         externalGearRatio=1)
+            self.driveTrain.set_timeout(3, SECONDS)
+            self.driveTrain.stop()
+            self.driveTrain.set_turn_velocity(80, PERCENT)
+            self.driveTrain.set_drive_velocity(90, PERCENT)
+
+            self.brain.screen.print("Preparing...")
+            self.brain.screen.next_row()
+            wait(100, MSEC)  # Don't calibrate immediately to avoid human touch effects/wobbles
+            self.gyro.calibrate()
+            self.brain.timer.clear()
+            while (self.gyro.is_calibrating() and self.brain.timer.time(SECONDS) < 3):
+                wait(20, MSEC)
+            self.isAutoReady = True
+            self.brain.screen.print("Ready.")
+            self.brain.screen.next_row()
+
+            # Set up event handlers for the bumper switches
+            # Basket Up Bumper = Auto Near
+            # Rocker Up Bumper = Auto Far
+            self.basketUpBumper.pressed(self.onBasketUpBumper)
+
+    def onHealthLightPressed(self):
+        self.brain.screen.print("Pressed LED")
+        self.brain.screen.next_row()
+        self.autoSetup()
+
+    def onBasketUpBumper(self):
+        self.autoNear()
 
     def checkHealth(self):
         color = Color.RED
@@ -316,6 +358,15 @@ class Bot:
 
     def autoNear(self):
         if self.driveTrain is not None:
+            if self.isAutoReady:
+                self.brain.screen.print("Starting Auto Near...")
+                self.brain.screen.next_row()
+            else:
+                self.brain.screen.print("Not calibrated yet. Try soon.")
+                self.brain.screen.next_row()
+                return
+                 
+            self.driveTrain.drive_for(REVERSE, 200, MM)
             self.driveTrain.turn_to_rotation(-35, DEGREES)
             self.driveTrain.set_timeout(3, SECONDS)
             self.driveTrain.drive_for(REVERSE, 780, MM)
@@ -339,6 +390,15 @@ class Bot:
 
     def autoFar(self):
         if self.driveTrain is not None:
+            if self.isAutoReady:
+                self.brain.screen.print("Starting Auto Far...")
+                self.brain.screen.next_row()
+            else:
+                self.brain.screen.print("Not calibrated yet. Try soon.")
+                self.brain.screen.next_row()
+                return
+            
+            self.driveTrain.drive_for(REVERSE, 200, MM)
             self.driveTrain.turn_to_rotation(36, DEGREES)
             self.driveTrain.set_timeout(10, SECONDS)
             self.driveTrain.drive_for(REVERSE, 820, MM)
@@ -377,16 +437,12 @@ class Bot:
 
     def run(self):
         self.setup()
-        if self.botMode == BotMode.AUTOFAR:
-            self.autoFar()
-        elif self.botMode == BotMode.AUTONEAR:
-            self.autoNear()
-        else:
-            while True: # Main loop handling drive train updates
+        while True: # Main loop handling drive train updates
+            if self.botMode == BotMode.DRIVER:
                 self.updateLeftDrive(1)
                 self.updateRightDrive(1)
-                self.checkHealth()
-                wait(20, MSEC)  # Yield to other things going on
+            self.checkHealth()
+            wait(20, MSEC)  # Yield to other things going on
 
 bot = Bot()
 bot.run()
