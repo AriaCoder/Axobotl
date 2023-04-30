@@ -1,10 +1,22 @@
 # Library imports
 from vex import *
 
+
+class BotMode:
+    '''The measurement units for distance values.'''
+    class BotMode(vexEnum):
+        pass
+    DRIVER = BotMode(0, "Driver")
+    '''Driver control mode'''
+    AUTONEAR = BotMode(1, "AutoNear")
+    '''Autonomous Near Field'''
+    AUTOFAR = BotMode(2, "AutoFar")
+    '''Autonomous Far Field'''
+
 class Bot:
     def __init__(self):
-        self.counter = 0
-        self.slot = 1  # What slot to put this program in
+        # Change the botMode to change the behavior
+        self.botMode = BotMode.DRIVER
         self.isLongArmOut = False
         self.isAutoShooting = False
     
@@ -21,8 +33,21 @@ class Bot:
         self.setupHealthLight()
 
     def setupPortMappings(self):
+        self.gyro = Gyro(Ports.PORT10)
         self.motorLeft = Motor(Ports.PORT5)
         self.motorRight = Motor(Ports.PORT7)
+        if self.botMode == BotMode.DRIVER:
+            self.driveTrain = None
+        else:
+            self.isAutoShooting = True
+            self.driveTrain = SmartDrive(self.motorLeft, 
+                                         self.motorRight,
+                                         self.gyro,
+                                         wheelTravel=7.87402,
+                                         trackWidth=9,
+                                         wheelBase=(6+(3/16)),
+                                         units=DistanceUnits.IN,
+                                         externalGearRatio=1)
         self.rocker = Motor(Ports.PORT12)
         self.shooter = Motor(Ports.PORT4)
         self.arm = Motor(Ports.PORT3)
@@ -76,13 +101,19 @@ class Bot:
         RockerDown = 0
 
     def setupDrive(self):
-        self.motorLeft.set_velocity(0, PERCENT)
-        self.motorLeft.set_max_torque(100, PERCENT)
-        self.motorLeft.spin(FORWARD)
-        self.motorRight.set_reversed(True)
-        self.motorRight.set_velocity(0, PERCENT)
-        self.motorRight.set_max_torque(100, PERCENT)
-        self.motorRight.spin(FORWARD)
+        if self.driveTrain is None:
+            self.motorLeft.set_velocity(0, PERCENT)
+            self.motorLeft.set_max_torque(100, PERCENT)
+            self.motorLeft.spin(FORWARD)
+            self.motorRight.set_reversed(True)
+            self.motorRight.set_velocity(0, PERCENT)
+            self.motorRight.set_max_torque(100, PERCENT)
+            self.motorRight.spin(FORWARD)
+        else:
+            self.driveTrain.set_timeout(3, SECONDS)
+            self.driveTrain.set_turn_velocity(80, PERCENT)
+            self.driveTrain.set_drive_velocity(90, PERCENT)
+            self.driveTrain.drive_for(REVERSE, 200, MM)
 
     def updateLeftDrive(self, joystickTolerance: int):
         velocity: float = self.controller.axisA.position()
@@ -130,11 +161,12 @@ class Bot:
         self.arm.stop()
 
     # Experimental: Hold the R-Down bumper and we keep rocking and shooting
-    def autoShoot(self):
-        while self.isAutoShooting:
+    def autoShoot(self, rocks: int = 100):
+        while self.isAutoShooting and rocks > 0:
             self.startShooter()
             self.rockUpToCatch()
             self.rockDownToShoot()
+            rocks -= 1
 
     def rockDownToShoot(self):
         print("rockDownToShoot!!")
@@ -282,17 +314,75 @@ class Bot:
             color = Color.RED
         self.healthLight.set_color(color)
 
+    def autoNear(self):
+        if self.driveTrain is not None:
+            self.driveTrain.turn_to_rotation(-35, DEGREES)
+            self.driveTrain.set_timeout(3, SECONDS)
+            self.driveTrain.drive_for(REVERSE, 780, MM)
+            self.driveTrain.turn_to_rotation(-3, DEGREES)
+            self.driveTrain.set_timeout(3, SECONDS)
+            self.arm.spin_for(FORWARD, 300, DEGREES, wait=False)
+            self.driveTrain.drive_for(FORWARD, 200, MM)
+            self.autoWiggleBlue()
+            self.driveTrain.drive_for(REVERSE, 220, MM)
+            self.driveTrain.turn_to_rotation(35, DEGREES)
+            self.driveTrain.drive_for(REVERSE, 240, MM)
+            self.driveTrain.turn_to_rotation(0, DEGREES)
+            self.driveTrain.set_drive_velocity(100, PERCENT)
+            self.shooter.spin(FORWARD)
+            self.driveTrain.drive_for(REVERSE, 130, MM)
+            self.autoShoot(3)
+            self.driveTrain.set_timeout(2, SECONDS)
+            self.driveTrain.drive_for(FORWARD, 50, MM)
+            self.driveTrain.drive_for(REVERSE, 70, MM)
+            self.autoShoot(7)
+
+    def autoFar(self):
+        if self.driveTrain is not None:
+            self.driveTrain.turn_to_rotation(36, DEGREES)
+            self.driveTrain.set_timeout(10, SECONDS)
+            self.driveTrain.drive_for(REVERSE, 820, MM)
+            self.driveTrain.turn_to_rotation(0, DEGREES)
+            self.driveTrain.set_timeout(3, SECONDS)
+            self.arm.spin_for(FORWARD, 300, DEGREES, wait=False)
+            self.driveTrain.drive_for(FORWARD, 255, MM)
+            self.autoWiggleBlue()
+            self.driveTrain.drive_for(REVERSE, 220, MM)
+            self.driveTrain.turn_to_rotation(-40, DEGREES)
+            self.driveTrain.drive_for(REVERSE, 200, MM)
+            self.driveTrain.turn_to_rotation(-8, DEGREES)
+            self.driveTrain.set_drive_velocity(100, PERCENT)
+            self.shooter.spin(FORWARD)
+            self.driveTrain.drive_for(REVERSE, 130, MM)
+            self.autoShoot(4)
+            self.shooter.stop()
+            self.autoPushYellowFromFar()
+
+    def autoPushYellowFromFar(self):
+        if self.driveTrain is not None:
+            self.driveTrain.turn_for(LEFT, 95, DEGREES)
+            self.driveTrain.drive_for(FORWARD, 200, MM)
+            self.driveTrain.turn_for(RIGHT, 30, DEGREES)
+            self.driveTrain.drive_for(FORWARD, 200, MM)
+
+    def autoWiggleBlue(self):
+        # Wiggle forward and back to help tilt discs in
+        if self.driveTrain is not None:
+            self.arm.spin_for(REVERSE, 300, DEGREES, wait=False)
+            wait(1.5, SECONDS)
+            self.driveTrain.set_timeout(2, SECONDS)
+            self.driveTrain.drive_for(FORWARD, 30, MM)
+            self.driveTrain.drive_for(REVERSE, 40, MM)
+            self.driveTrain.drive_for(FORWARD, 80, MM)
+
     def run(self):
         self.setup()
-        if self.slot == 2:   # Auton
-            # AutoShootBlue_near(True)
-            pass
-        elif self.slot == 3: # Auton
-            # AutoShootBlue_near(False)
-            pass
+        if self.botMode == BotMode.AUTOFAR:
+            self.autoFar()
+        elif self.botMode == BotMode.AUTONEAR:
+            self.autoNear()
         else:
-            # Main loop
-            while True:
+            while True: # Main loop handling drive train updates
                 self.updateLeftDrive(1)
                 self.updateRightDrive(1)
                 self.checkHealth()
