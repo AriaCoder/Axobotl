@@ -163,7 +163,9 @@ class Bot:
 
     # Experimental: Hold the R-Down bumper and we keep rocking and shooting
     def autoShoot(self, rocks: int = 100):
-        while self.isAutoShooting and rocks > 0:
+        while (rocks > 0
+                and self.isAutoShooting
+                and (self.isAutoRunning or self.driveTrain is None)):
             self.startShooter()
             self.rockUpToCatch()
             self.rockDownToShoot()
@@ -343,6 +345,7 @@ class Bot:
     def onHealthLightPressed(self):
         if self.isAutoRunning:
             # Tell the rest of the code to stop
+            self.brain.play_sound(SoundType.POWER_DOWN)
             self.isAutoRunning = False
             self.stopEverything()
         else:
@@ -353,11 +356,13 @@ class Bot:
             self.isAutoRunning = False
 
     def onBasketUpBumper(self):
+        # This is the best way to stop everything: raise exception
         try:
             self.isAutoRunning = True
             self.autoNear()
         except ValueError as ex:
-            self.brain.screen.print("EXCEPTION!")
+            self.brain.screen.print("STOPPED")
+            self.brain.screen.next_row()
 
     def checkHealth(self):
         color = Color.RED
@@ -374,20 +379,20 @@ class Bot:
 
     def autoDrive(self, direction, distance, units=DistanceUnits.IN,
                   velocity=None, units_v:VelocityPercentUnits=VelocityUnits.RPM, wait=True):
-        self.driveTrain.drive_for(direction,distance, units, velocity, units_v, wait)
         if not self.isAutoRunning:
             raise ValueError("Aborted autoDrive")
+        self.driveTrain.drive_for(direction,distance, units, velocity, units_v, wait)
 
     def autoTurn(self, angle, units=RotationUnits.DEG,
                  velocity=None, units_v:VelocityPercentUnits=VelocityUnits.RPM, wait=True):
-        self.driveTrain.turn_for(LEFT, angle, units, velocity, units_v, wait)
         if not self.isAutoRunning:
             raise ValueError("Aborted autoTurn")
+        self.driveTrain.turn_to_rotation(angle, units, velocity, units_v, wait)
 
     def autoNear(self):
         if self.driveTrain is not None and self.isAutoRunning:
             if self.isAutoReady:
-                self.brain.screen.print("Starting Auto Near...")
+                self.brain.screen.print("Auto Near GO")
                 self.brain.screen.next_row()
             else:
                 self.brain.screen.print("Not calibrated yet. Try soon.")
@@ -395,13 +400,14 @@ class Bot:
                 return
                  
             self.autoDrive(REVERSE, 200, MM)
-            self.autoTurn(-35, DEGREES)
+            self.autoTurn(-40, DEGREES)
             self.driveTrain.set_timeout(3, SECONDS)
             self.autoDrive(REVERSE, 780, MM)
-            self.autoTurn(-3, DEGREES)
+            self.autoTurn(-5, DEGREES)
+            # Raise arm and approach blue dispenser
             self.driveTrain.set_timeout(3, SECONDS)
             self.arm.spin_for(FORWARD, 300, DEGREES, wait=False)
-            self.autoDrive(FORWARD, 200, MM)
+            self.autoDrive(FORWARD, 220, MM)
             self.autoWiggleBlue()
             self.autoDrive(REVERSE, 220, MM)
             self.autoTurn(35, DEGREES)
@@ -419,7 +425,7 @@ class Bot:
     def autoFar(self):
         if self.driveTrain is not None and self.isAutoRunning:
             if self.isAutoReady:
-                self.brain.screen.print("Starting Auto Far...")
+                self.brain.screen.print("Auto Far GO")
                 self.brain.screen.next_row()
             else:
                 self.brain.screen.print("Not calibrated yet. Try soon.")
