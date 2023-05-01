@@ -1,36 +1,9 @@
 # Library imports
 from vex import *
 
-class botEnum:
-    '''Base class for all enumerated types'''
-    value = 0
-    name = ""
-
-    def __init__(self, value, name):
-        self.value = value
-        self.name = name
-
-    def __str__(self):
-        return self.name
-
-    def __repr__(self):
-        return self.name
-
-class BotMode:
-    '''The measurement units for distance values.'''
-    class BotMode(botEnum):
-        pass
-    DRIVER = BotMode(0, "Driver")
-    '''Driver control mode'''
-    AUTONEAR = BotMode(1, "AutoNear")
-    '''Autonomous Near Field'''
-    AUTOFAR = BotMode(2, "AutoFar")
-    '''Autonomous Far Field'''
 
 class Bot:
     def __init__(self):
-        # Change the botMode to change the behavior
-        self.botMode = BotMode.DRIVER
         self.isLongArmOut = False
         self.isAutoRunning = False
         self.isAutoShooting = False
@@ -44,7 +17,6 @@ class Bot:
         self.setupArm()
         self.setupDrive()
         self.setupRocker()
-        self.setupSpinner()
         self.setupShooter()
         self.setupHealthLight()
 
@@ -81,7 +53,6 @@ class Bot:
         # For autonomous: press the LED button to start 
         self.healthLight.pressed(self.onHealthLightPressed)
 
-
     def setupArm(self):
         self.arm.stop()
         self.arm.set_reversed(True)
@@ -95,17 +66,13 @@ class Bot:
         self.shooter.set_reversed(True)
         self.shooter.set_stopping(COAST)
         self.shooter.set_max_torque(100, PERCENT)
-        self.shooter.set_velocity(67, PERCENT)
-
-    def setupSpinner(self):
-        pass
+        self.shooter.set_velocity(70, PERCENT)
 
     def setupRocker(self):
         self.rocker.set_reversed(True)
         self.rocker.set_max_torque(100, PERCENT)
         self.rocker.set_velocity(100, PERCENT)
         self.rocker.set_stopping(COAST)
-        RockerDown = 0
 
     def setupDrive(self):
         self.motorLeft.set_velocity(0, PERCENT)
@@ -131,14 +98,22 @@ class Bot:
             self.motorRight.set_velocity(0, PERCENT)
 
     def raiseArmBasket(self, auto: bool = False):
+        # Strange: Wait until the bumper is no longer considered "pressed"
         self.brain.timer.clear()
-        # Do not let the motor for the arm basket spin too long
-        # and only until the bumper sensor is pressed
-        while (self.brain.timer.time(SECONDS) < 4
-                and not self.basketUpBumper.pressing()
-                and (auto or self.controller.buttonLUp.pressing())):
+        while (self.basketUpBumper.pressing() and self.brain.timer.time(SECONDS) < 1):
+            wait(30, MSEC)
+            print("*** WAITING for Basket Bumper")
+        if not self.basketUpBumper.pressing():
+            # Do not let the motor for the arm basket spin too long
+            # and only until the bumper sensor is pressed
+            self.arm.set_max_torque(100, PERCENT)
             self.arm.spin(FORWARD)
-            wait(20, MSEC)
+            self.brain.timer.clear()
+            while (self.brain.timer.time(SECONDS) < 4
+                    and not self.basketUpBumper.pressing()
+                    and (auto or self.controller.buttonLUp.pressing())):
+                wait(20, MSEC)
+        self.brain.screen.next_row()
         self.arm.set_stopping(HOLD)
         self.arm.stop()
 
@@ -187,7 +162,7 @@ class Bot:
 
         # Wait for shooter to spin up IF autoshooting
         self.brain.timer.clear()
-        while (self.brain.timer.time(SECONDS) < 2
+        while (self.brain.timer.time(SECONDS) < 3
                 and self.isAutoShooting
                 and not self.rockerDownBumper.pressing()
                 and self.shooter.velocity(PERCENT) > 0.0               
@@ -238,7 +213,7 @@ class Bot:
             wait(20, MSEC)
         self.rocker.set_stopping(BRAKE)
         self.rocker.stop()
-        
+    
     def toggleLongArm(self):
         self.longArm.set_timeout(3, SECONDS)
         self.longArm.set_max_torque(100, PERCENT)
@@ -262,6 +237,7 @@ class Bot:
         self.rocker.stop()
         self.shooter.set_stopping(COAST)
         self.shooter.stop()
+        self.arm.set_stopping(COAST)
         self.arm.stop()
         if self.driveTrain is not None:
             self.driveTrain.stop()
@@ -310,7 +286,6 @@ class Bot:
     
     def autoSetup(self):
         if not self.isAutoReady:
-            self.botMode = BotMode.AUTONEAR
             self.isAutoShooting = True
 
             self.driveTrain = SmartDrive(self.motorLeft, 
@@ -381,13 +356,15 @@ class Bot:
                   velocity=None, units_v:VelocityPercentUnits=VelocityUnits.RPM, wait=True):
         if not self.isAutoRunning:
             raise ValueError("Aborted autoDrive")
-        self.driveTrain.drive_for(direction,distance, units, velocity, units_v, wait)
+        if self.driveTrain is not None:
+            self.driveTrain.drive_for(direction,distance, units, velocity, units_v, wait)
 
     def autoTurn(self, angle, units=RotationUnits.DEG,
                  velocity=None, units_v:VelocityPercentUnits=VelocityUnits.RPM, wait=True):
         if not self.isAutoRunning:
             raise ValueError("Aborted autoTurn")
-        self.driveTrain.turn_to_rotation(angle, units, velocity, units_v, wait)
+        if self.driveTrain is not None:
+            self.driveTrain.turn_to_rotation(angle, units, velocity, units_v, wait)
 
     def autoNear(self):
         if self.driveTrain is not None and self.isAutoRunning:
@@ -399,27 +376,33 @@ class Bot:
                 self.brain.screen.next_row()
                 return
                  
-            self.autoDrive(REVERSE, 200, MM)
-            self.autoTurn(-40, DEGREES)
-            self.driveTrain.set_timeout(3, SECONDS)
-            self.autoDrive(REVERSE, 780, MM)
-            self.autoTurn(-5, DEGREES)
-            # Raise arm and approach blue dispenser
-            self.driveTrain.set_timeout(3, SECONDS)
-            self.arm.spin_for(FORWARD, 300, DEGREES, wait=False)
-            self.autoDrive(FORWARD, 220, MM)
-            self.autoWiggleBlue()
-            self.autoDrive(REVERSE, 220, MM)
-            self.autoTurn(35, DEGREES)
-            self.autoDrive(REVERSE, 240, MM)
-            self.autoTurn(0, DEGREES)
-            self.driveTrain.set_drive_velocity(100, PERCENT)
-            self.shooter.spin(FORWARD)
-            self.autoDrive(REVERSE, 130, MM)
-            self.autoShoot(3)
-            self.driveTrain.set_timeout(2, SECONDS)
-            self.autoDrive(FORWARD, 50, MM)
-            self.autoDrive(REVERSE, 70, MM)
+            if False:
+                self.autoDrive(REVERSE, 200, MM)
+                self.autoTurn(-30, DEGREES)
+                self.driveTrain.set_timeout(3, SECONDS)
+                self.autoDrive(REVERSE, 780, MM)
+                self.autoTurn(5, DEGREES)
+                # Raise arm and approach blue dispenser
+                self.driveTrain.set_timeout(3, SECONDS)
+                self.arm.spin_for(FORWARD, 300, DEGREES, wait=False)
+                self.autoDrive(FORWARD, 240, MM)
+                self.autoWiggleBlue()
+                self.autoDrive(REVERSE, 220, MM)
+                self.autoTurn(35, DEGREES)
+                self.autoDrive(REVERSE, 240, MM)
+                self.autoTurn(0, DEGREES)
+                self.driveTrain.set_drive_velocity(100, PERCENT)
+                self.shooter.spin(FORWARD)
+                self.autoDrive(REVERSE, 130, MM)
+                self.autoShoot(3)
+                self.driveTrain.set_timeout(2, SECONDS)
+                self.autoDrive(FORWARD, 50, MM)
+                self.autoDrive(REVERSE, 70, MM)
+            
+            # Autoshoot doesn't auto-dump basket, so we'll do it
+            self.startShooter()
+            self.rockUpToCatch()
+            self.raiseArmBasket(auto=True)
             self.autoShoot(7)
 
     def autoFar(self):
@@ -472,7 +455,7 @@ class Bot:
     def run(self):
         self.setup()
         while True: # Main loop handling drive train updates
-            if self.botMode == BotMode.DRIVER:
+            if not self.isAutoReady:
                 self.updateLeftDrive(1)
                 self.updateRightDrive(1)
             self.checkHealth()
