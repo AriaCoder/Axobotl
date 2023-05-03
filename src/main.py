@@ -299,7 +299,10 @@ class Bot:
             self.driveTrain.set_timeout(3, SECONDS)
             self.driveTrain.stop()
             self.driveTrain.set_turn_velocity(80, PERCENT)
-            self.driveTrain.set_drive_velocity(90, PERCENT)
+            self.driveTrain.set_drive_velocity(100, PERCENT)
+
+            # Shooter should be faster for auton?
+            self.shooter.set_velocity(85, PERCENT)
 
             self.brain.screen.print("Preparing...")
             self.brain.screen.next_row()
@@ -332,21 +335,23 @@ class Bot:
             self.isAutoRunning = False
 
     def onBasketUpBumper(self):
-        # This is the best way to stop everything: raise exception
-        try:
-            self.isAutoRunning = True
-            self.autoNear()
-        except ValueError as ex:
-            self.brain.screen.print("Stopped")
-            self.brain.screen.next_row()
+        if not self.isAutoRunning:
+            # This is the best way to stop everything: raise exception
+            try:
+                self.isAutoRunning = True
+                self.autoNear()
+            except ValueError as ex:
+                self.brain.screen.print("Stopped")
+                self.brain.screen.next_row()
 
     def onRockerUpBumper(self):
-        try:
-            self.isAutoRunning = True
-            self.autoFar()
-        except ValueError as ex:
-            self.brain.screen.print("Stopped")
-            self.brain.screen.next_row()
+        if not self.isAutoRunning:
+            try:
+                self.isAutoRunning = True
+                self.autoFar()
+            except ValueError as ex:
+                self.brain.screen.print("Stopped")
+                self.brain.screen.next_row()
 
     def checkHealth(self):
         color = Color.RED
@@ -364,6 +369,8 @@ class Bot:
     def autoDrive(self, direction, distance, units=DistanceUnits.IN,
                   velocity=None, units_v:VelocityPercentUnits=VelocityUnits.RPM, wait=True):
         if not self.isAutoRunning:
+            if self.driveTrain is not None:
+                self.driveTrain.stop()
             raise ValueError("Aborted autoDrive")
         if self.driveTrain is not None:
             self.driveTrain.drive_for(direction, distance, units, velocity, units_v, wait)
@@ -371,15 +378,26 @@ class Bot:
     def autoTurn(self, angle, units=RotationUnits.DEG,
                  velocity=None, units_v:VelocityPercentUnits=VelocityUnits.RPM, wait=True):
         if not self.isAutoRunning:
+            if self.driveTrain is not None:
+                self.driveTrain.stop()
             raise ValueError("Aborted autoTurn")
         if self.driveTrain is not None:
             self.driveTrain.turn_to_rotation(angle, units, velocity, units_v, wait)
 
-    def autoBasketShoot(self, rocks: int = 100):
+    def autoBasketShoot(self, rocks: int = 100, bangs: int = 0):
             self.startShooter()
             self.rockUpToCatch()
             self.raiseArmBasket(auto=True)
             self.autoShoot(rocks)
+            while True:
+                # Bang the fence a few times to loosen discs in basket
+                if bangs > 0:
+                    bangs -= 1
+                    self.autoDrive(FORWARD, 50, MM)
+                    self.autoDrive(REVERSE, 50, MM)
+                    self.autoShoot(rocks)
+                else:
+                    break
 
     def autoNear(self):
         if self.driveTrain is not None and self.isAutoRunning:
@@ -399,20 +417,15 @@ class Bot:
             # Raise arm and approach blue dispenser
             self.driveTrain.set_timeout(3, SECONDS)
             self.arm.spin_for(FORWARD, 300, DEGREES, wait=False)
-            self.autoDrive(FORWARD, 250, MM)
+            self.autoDrive(FORWARD, 247, MM)
             self.autoWiggleBlue()
             self.autoDrive(REVERSE, 220, MM)
             self.autoTurn(35, DEGREES)
             self.autoDrive(REVERSE, 240, MM)
             self.autoTurn(0, DEGREES)
-            self.driveTrain.set_drive_velocity(100, PERCENT)
-            self.shooter.spin(FORWARD)
-            self.autoDrive(REVERSE, 130, MM)
-            self.autoShoot(3)
-            self.driveTrain.set_timeout(2, SECONDS)
-            self.autoDrive(FORWARD, 50, MM)
-            self.autoDrive(REVERSE, 70, MM)
-            self.autoBasketShoot(10)
+            self.startShooter()
+            # self.autoDrive(REVERSE, 130, MM)
+            self.autoBasketShoot(rocks=8, bangs=3)
 
     def autoFar(self):
         if self.driveTrain is not None and self.isAutoRunning:
@@ -425,23 +438,22 @@ class Bot:
                 return
             
             self.autoDrive(REVERSE, 200, MM)
-            self.autoTurn(38, DEGREES)
+            self.autoTurn(40, DEGREES)
             self.driveTrain.set_timeout(10, SECONDS)
             self.autoDrive(REVERSE, 775, MM)
             self.autoTurn(0, DEGREES)
             self.driveTrain.set_timeout(3, SECONDS)
             # Drive toward blue tower and bring arm up
-            self.arm.spin_for(FORWARD, 240, DEGREES, wait=False)
+            self.arm.spin_for(FORWARD, 270, DEGREES, wait=False)
             self.autoDrive(FORWARD, 270, MM)
             self.autoWiggleBlue()
             self.autoDrive(REVERSE, 220, MM)
             self.autoTurn(-40, DEGREES)
             self.autoDrive(REVERSE, 200, MM)
             self.autoTurn(-8, DEGREES)
-            self.driveTrain.set_drive_velocity(100, PERCENT)
             self.shooter.spin(FORWARD)
             self.autoDrive(REVERSE, 130, MM)
-            self.autoBasketShoot(4)
+            self.autoBasketShoot(rocks=4, bangs=2)
             self.shooter.stop()
             self.autoPushYellowFromFar()
 
